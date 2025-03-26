@@ -4,6 +4,7 @@ from rest_framework.exceptions import ValidationError
 from .models import User, Category, News, Comment, Reaction
 from .serializers import UserSerializer, CategorySerializer, NewsSerializer, CommentSerializer, ReactionSerializer
 from .utils import custom_response, error_response
+from django.db.models import Count
 
 
 class BaseViewSet(viewsets.ModelViewSet):
@@ -49,21 +50,40 @@ class BaseViewSet(viewsets.ModelViewSet):
 class UserViewSet(BaseViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    filter_backends = [filters.SearchFilter]  # Thêm bộ lọc tìm kiếm
-    search_fields = ['name']  # Chỉ định tìm kiếm theo trường 'name'
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name']
 
 
 class CategoryViewSet(BaseViewSet):
-    queryset = Category.objects.all()
     serializer_class = CategorySerializer
-    filter_backends = [filters.SearchFilter]  # Thêm bộ lọc tìm kiếm
-    search_fields = ['name']  # Chỉ định tìm kiếm theo trường 'name'
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name']
+
+    def get_queryset(self):
+        queryset = Category.objects.annotate(news_count=Count('news')).prefetch_related('news_set')
+
+        limit = self.request.query_params.get('limit')
+        order_by = self.request.query_params.get('order_by', '-id')
+
+        allowed_fields = {'id', '-id', 'name', '-name', 'news_count', '-news_count', 'created_at', '-created_at'}
+        if order_by not in allowed_fields:
+            order_by = '-id'
+
+        queryset = queryset.order_by(order_by)
+
+        if limit is not None:
+            return queryset[:int(limit)]
+        return queryset
 
 class NewsViewSet(BaseViewSet):
-    queryset = News.objects.all()
+    queryset = News.objects.annotate(
+        comment_count=Count('comment'),
+        reaction_count=Count('reaction')
+    ).select_related('category', 'author_id')
     serializer_class = NewsSerializer
-    filter_backends = [filters.SearchFilter]  # Thêm bộ lọc tìm kiếm
-    search_fields = ['title']  # Chỉ định tìm kiếm theo trường 'name'
+
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['title']
 
 
 class CommentViewSet(BaseViewSet):

@@ -4,7 +4,7 @@ from .views import UserViewSet, CategoryViewSet, NewsViewSet, CommentViewSet, Re
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet)
-router.register(r'categories', CategoryViewSet)
+router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'news', NewsViewSet)
 router.register(r'comments', CommentViewSet)
 router.register(r'reactions', ReactionViewSet)
