@@ -1,5 +1,5 @@
 from django.http import Http404
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.exceptions import ValidationError
 from .models import User, Category, News, Comment, Reaction
 from .serializers import UserSerializer, CategorySerializer, NewsSerializer, CommentSerializer, ReactionSerializer
@@ -49,14 +49,22 @@ class BaseViewSet(viewsets.ModelViewSet):
 class UserViewSet(BaseViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    filter_backends = [filters.SearchFilter]  # Thêm bộ lọc tìm kiếm
+    search_fields = ['name']  # Chỉ định tìm kiếm theo trường 'name'
+
 
 class CategoryViewSet(BaseViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+    filter_backends = [filters.SearchFilter]  # Thêm bộ lọc tìm kiếm
+    search_fields = ['name']  # Chỉ định tìm kiếm theo trường 'name'
 
 class NewsViewSet(BaseViewSet):
     queryset = News.objects.all()
     serializer_class = NewsSerializer
+    filter_backends = [filters.SearchFilter]  # Thêm bộ lọc tìm kiếm
+    search_fields = ['title']  # Chỉ định tìm kiếm theo trường 'name'
+
 
 class CommentViewSet(BaseViewSet):
     queryset = Comment.objects.all()
