@@ -29,12 +29,33 @@ class News(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-class Comment(models.Model):
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE)
-    article_id = models.ForeignKey(News, on_delete=models.CASCADE)
+class CommentBase(models.Model):
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = False
+
+    def count_all_sub_comments(self):
+        if not hasattr(self, "pr"):
+            return 0
+
+        count = self.pr.count()
+        for sub_comment in self.pr.all():
+            count += sub_comment.count_all_sub_comments()
+        return count
+
+
+class Comment(CommentBase):
+    commentbase_ptr = models.OneToOneField(CommentBase, on_delete=models.CASCADE, parent_link=True, primary_key=True)
+    article = models.ForeignKey(News, on_delete=models.CASCADE)
+
+class SubComment(CommentBase):
+    commentbase_ptr = models.OneToOneField(CommentBase, on_delete=models.CASCADE, parent_link=True, primary_key=True)
+    parent_comment = models.ForeignKey(CommentBase, on_delete=models.CASCADE, related_name='pr')
 
 class Reaction(models.Model):
     type = models.CharField(max_length=20, choices=[('like', 'Like'), ('dislike', 'Dislike')])

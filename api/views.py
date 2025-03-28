@@ -1,11 +1,10 @@
 from django.http import Http404
 from rest_framework import viewsets, status, filters
 from rest_framework.exceptions import ValidationError
-from .models import User, Category, News, Comment, Reaction
-from .serializers import UserSerializer, CategorySerializer, NewsSerializer, CommentSerializer, ReactionSerializer
+from .models import User, Category, News, Comment, Reaction, SubComment, CommentBase
+from .serializers import UserSerializer, CategorySerializer, NewsSerializer, CommentSerializer, ReactionSerializer, SubCommentSerializer, CommentBaseSerializer
 from .utils import custom_response, error_response
 from django.db.models import Count
-
 
 class BaseViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
@@ -77,7 +76,6 @@ class CategoryViewSet(BaseViewSet):
 
 class NewsViewSet(BaseViewSet):
     queryset = News.objects.annotate(
-        comment_count=Count('comment'),
         reaction_count=Count('reaction')
     ).select_related('category', 'author_id')
     serializer_class = NewsSerializer
@@ -85,10 +83,23 @@ class NewsViewSet(BaseViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['title']
 
+class CommentBaseViewSet(BaseViewSet):
+    queryset = CommentBase.objects.all()
+    serializer_class = CommentBaseSerializer
 
 class CommentViewSet(BaseViewSet):
-    queryset = Comment.objects.all()
+    queryset = Comment.objects.select_related('user')
+    queryset = queryset.order_by('-created_at')
     serializer_class = CommentSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['article__id']
+
+class SubCommentViewSet(BaseViewSet):
+    queryset = SubComment.objects.select_related('user')
+    serializer_class = SubCommentSerializer
+    queryset = queryset.order_by('-created_at')
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['parent_comment__id']
 
 class ReactionViewSet(BaseViewSet):
     queryset = Reaction.objects.all()
