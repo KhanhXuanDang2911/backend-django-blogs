@@ -92,7 +92,8 @@ class SubComment(CommentBase):
     parent_comment = models.ForeignKey(CommentBase, on_delete=models.CASCADE, related_name='pr')
 
 class Reaction(models.Model):
-    type = models.CharField(max_length=20, choices=[('like', 'Like'), ('dislike', 'Dislike')])
+    type = models.CharField(max_length=20, choices=[('love', 'Love'), ('like', 'Like'), ('dislike', 'Dislike'), ('wow', 'Wow'),
+                                                    ('sad', 'Sad')])
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     news_id = models.ForeignKey(News, on_delete=models.CASCADE)
