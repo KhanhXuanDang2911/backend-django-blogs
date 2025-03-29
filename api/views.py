@@ -102,19 +102,34 @@ class NewsFilter(django_filters.FilterSet):
 class NewsPagination(LimitOffsetPagination):
     default_limit = None
     max_limit = 50
+class NewsFilter(django_filters.FilterSet):
+    author_id = django_filters.NumberFilter(field_name="author_id", lookup_expr="exact")  # 👈 Thêm filter author_id
 
+    class Meta:
+        model = News
+        fields = ['author_id']
+# class NewsViewSet(BaseViewSet):
+#     queryset = News.objects.annotate(
+#         reaction_count=Count('reaction')
+#     ).select_related('category', 'author_id')
+#     queryset = queryset.order_by('-created_at')
+#     serializer_class = NewsSerializer
+#     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+#     filterset_class = NewsFilter
+#     search_fields = ['title']
+#
+#     pagination_class = NewsPagination
 class NewsViewSet(BaseViewSet):
     queryset = News.objects.annotate(
         reaction_count=Count('reaction')
     ).select_related('category', 'author_id')
     queryset = queryset.order_by('-created_at')
     serializer_class = NewsSerializer
-
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = NewsFilter
     search_fields = ['title']
 
-    pagination_class = NewsPagination
+    pagination_class = NewsPagination  # 👈 Vẫn giữ phân trang
 
 class CommentBaseViewSet(BaseViewSet):
     queryset = CommentBase.objects.all()
@@ -163,7 +178,7 @@ class CountRecordsView(APIView):
 class CountUserRecordsView(APIView):
     @staticmethod
     def get(request):
-        user_id = 8  # Hardcode user_id = 8
+        user_id = request.query_params.get('user_id')
         user = User.objects.filter(id=user_id).first()
         data = {
                 "news_count": News.objects.filter(author_id=user).count(),

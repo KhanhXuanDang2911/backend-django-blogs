@@ -69,3 +69,18 @@ class ReactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reaction
         fields = '__all__'
+
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+
+        # Thêm thông tin người dùng vào payload
+        token['role'] = user.role
+        token['user_id'] = user.id
+        token['is_active'] = user.is_active
+        # Thêm các thông tin khác nếu cần
+
+        return token
