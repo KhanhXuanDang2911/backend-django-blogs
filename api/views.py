@@ -5,6 +5,16 @@ from .models import User, Category, News, Comment, Reaction, SubComment, Comment
 from .serializers import UserSerializer, CategorySerializer, NewsSerializer, CommentSerializer, ReactionSerializer, SubCommentSerializer, CommentBaseSerializer
 from .utils import custom_response, error_response
 from django.db.models import Count
+from django.contrib.auth import authenticate
+from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework import status
+from django.utils.timezone import now
+from .models import User
+from .serializers import UserSerializer
+from django.contrib.auth.hashers import check_password, make_password
+
 
 class BaseViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
@@ -104,4 +114,149 @@ class SubCommentViewSet(BaseViewSet):
 class ReactionViewSet(BaseViewSet):
     queryset = Reaction.objects.all()
     serializer_class = ReactionSerializer
+
+
+
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+    def post(self, request):
+        username = request.data.get("username")
+        password = request.data.get("password")
+
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return error_response(
+                status.HTTP_401_UNAUTHORIZED,
+                "Unauthorized",
+                "Invalid username or password",
+                request.path
+            )
+
+        # Check encrypted password
+        if not check_password(password, user.password):
+            return error_response(
+                status.HTTP_401_UNAUTHORIZED,
+                "Unauthorized",
+                "Invalid username or password",
+                request.path
+            )
+
+        if not user.is_active:
+            return error_response(
+                status.HTTP_403_FORBIDDEN,
+                "Forbidden",
+                "This account has been disabled",
+                request.path
+            )
+
+        # Generate JWT token
+        try:
+            refresh = RefreshToken.for_user(user)
+            return custom_response(
+                status.HTTP_200_OK,
+                "Login successful",
+                {
+                    "access_token": str(refresh.access_token),
+                    "refresh_token": str(refresh),
+                }
+            )
+        except Exception as e:
+            print(f"Token generation error: {str(e)}")
+            return error_response(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "Internal Server Error",
+                "Could not generate token",
+                request.path
+            )
+
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            refresh_token = request.data.get("refresh_token")
+            auth_header = request.headers.get('Authorization')
+            print(auth_header)  # Debug: Check if "Bearer" exists
+            token = RefreshToken(refresh_token)
+            token.blacklist()  # Mark token as expired
+
+            return custom_response(status.HTTP_200_OK, "Logout successful")
+        except Exception:
+            return error_response(status.HTTP_400_BAD_REQUEST, "Bad Request", "Invalid token", request.path)
+
+
+class RefreshTokenView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        try:
+            refresh_token = request.data.get("refresh_token")
+            if not refresh_token:
+                return error_response(status.HTTP_400_BAD_REQUEST, "Bad Request", "Refresh token is missing", request.path)
+
+            token = RefreshToken(refresh_token)
+            new_access_token = str(token.access_token)
+
+            return custom_response(
+                status.HTTP_200_OK,
+                "Token refreshed successfully",
+                {"access_token": new_access_token}
+            )
+        except Exception:
+            return error_response(status.HTTP_401_UNAUTHORIZED, "Unauthorized", "Invalid refresh token", request.path)
+
+
+
+class RegisterView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        username = request.data.get("username")
+        email = request.data.get("email")
+        password = request.data.get("password")
+
+        # Kiểm tra trùng username
+        if User.objects.filter(username=username).exists():
+            return error_response(
+                status.HTTP_400_BAD_REQUEST,
+                "Username already exists",
+                {"username": ["This username is already taken."]},
+                request.path
+            )
+
+        # Kiểm tra trùng email
+        if User.objects.filter(email=email).exists():
+            return error_response(
+                status.HTTP_400_BAD_REQUEST,
+                "Email already exists",
+                {"email": ["This email is already registered."]},
+                request.path
+            )
+
+        serializer = UserSerializer(data={
+            "username": username,
+            "name": request.data.get("name"),
+            "email": email,
+            "password": password,  # Password sẽ được mã hóa bởi model
+            "role": "user",
+            "is_active": True,
+            "phone": request.data.get("phone", "")
+        })
+
+        if serializer.is_valid():
+            user = serializer.save()
+            return custom_response(
+                status.HTTP_201_CREATED,
+                "User registered successfully",
+                {"id": user.id, "username": user.username, "email": user.email}
+            )
+        else:
+            return error_response(
+                status.HTTP_400_BAD_REQUEST,
+                "Bad Request",
+                serializer.errors,
+                request.path
+            )
 

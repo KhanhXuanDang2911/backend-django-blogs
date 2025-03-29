@@ -2,9 +2,25 @@ from rest_framework import serializers
 from .models import User, Category, News, Comment, Reaction, SubComment, CommentBase
 
 class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False)
+
     class Meta:
         model = User
         fields = '__all__'
+
+    # Xóa validate_password để tránh mã hóa mật khẩu ở đây
+
+    def create(self, validated_data):
+        # Chắc chắn có password khi tạo mới
+        if 'password' not in validated_data:
+            raise serializers.ValidationError({"password": "Mật khẩu là bắt buộc"})
+
+        # Không mã hóa ở đây nữa, để cho model tự xử lý
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        # Không mã hóa ở đây nữa, để cho model tự xử lý
+        return super().update(instance, validated_data)
 
 class CategorySerializer(serializers.ModelSerializer):
     news_count = serializers.IntegerField(source='news_set.count', read_only=True)
