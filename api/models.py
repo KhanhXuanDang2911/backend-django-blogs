@@ -1,3 +1,4 @@
+from cloudinary.models import CloudinaryField
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import PermissionsMixin
@@ -28,7 +29,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)  # Cần thiết để đăng nhập admin
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=11)
-    avatar = models.CharField(max_length=1000, blank=True, null=True)
+    # avatar = models.CharField(max_length=1000, blank=True, null=True)
+    avatar = CloudinaryField('avatar_image', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -57,7 +59,8 @@ class News(models.Model):
     excerpt = models.TextField(default=title)
     author_id = models.ForeignKey(User, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=[('draft', 'Draft'), ('published', 'Published')])
-    image = models.CharField(max_length=1000, blank=True, null=True)
+    # image = models.CharField(max_length=1000, blank=True, null=True)
+    image = CloudinaryField('news_image', blank=True, null=True)
     published_at = models.DateTimeField(null=True, blank=True)
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)

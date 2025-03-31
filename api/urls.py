@@ -7,6 +7,7 @@ from .views import (UserViewSet, CategoryViewSet,
                     NewsViewSet, CommentViewSet,
                     ReactionViewSet, SubCommentViewSet,
                     CommentBaseViewSet, CountRecordsView, NewsCountByMonthView, CountUserRecordsView)
+from django.urls import path, include
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet)
