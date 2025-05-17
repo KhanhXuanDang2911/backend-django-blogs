@@ -78,9 +78,14 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         token = super().get_token(user)
 
         # Thêm thông tin người dùng vào payload
+        token['username'] = user.username
+        token['email'] = user.email
+        token['name'] = user.name
         token['role'] = user.role
         token['user_id'] = user.id
         token['is_active'] = user.is_active
-        # Thêm các thông tin khác nếu cần
+        token['avatar'] = str(user.avatar) if user.avatar else None
+        token['is_staff'] = user.is_staff
+        token['is_superuser'] = user.is_superuser
 
         return token

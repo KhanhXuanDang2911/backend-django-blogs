@@ -24,6 +24,7 @@ from django.utils.timezone import now
 from datetime import timedelta
 from collections import OrderedDict
 from rest_framework.pagination import LimitOffsetPagination
+from django.db import transaction
 
 class BaseViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
@@ -104,10 +105,11 @@ class NewsPagination(LimitOffsetPagination):
     max_limit = 50
 class NewsFilter(django_filters.FilterSet):
     author_id = django_filters.NumberFilter(field_name="author_id", lookup_expr="exact")  # 👈 Thêm filter author_id
+    category = django_filters.NumberFilter(field_name="category", lookup_expr="exact")  # 👈 Thêm lọc category
 
     class Meta:
         model = News
-        fields = ['author_id']
+        fields = ['author_id', 'category']
 # class NewsViewSet(BaseViewSet):
 #     queryset = News.objects.annotate(
 #         reaction_count=Count('reaction')
@@ -214,8 +216,10 @@ class NewsCountByMonthView(APIView):
 
         return Response(dict(data))
 
+
 class LoginView(APIView):
     permission_classes = [AllowAny]
+
     def post(self, request):
         username = request.data.get("username")
         password = request.data.get("password")
@@ -226,16 +230,16 @@ class LoginView(APIView):
             return error_response(
                 status.HTTP_401_UNAUTHORIZED,
                 "Unauthorized",
-                "Invalid username or password",
+                "Tên đăng nhập hoặc mật khẩu không đúng",
                 request.path
             )
 
-        # Check encrypted password
+        # Kiểm tra mật khẩu
         if not check_password(password, user.password):
             return error_response(
                 status.HTTP_401_UNAUTHORIZED,
                 "Unauthorized",
-                "Invalid username or password",
+                "Tên đăng nhập hoặc mật khẩu không đúng",
                 request.path
             )
 
@@ -243,66 +247,51 @@ class LoginView(APIView):
             return error_response(
                 status.HTTP_403_FORBIDDEN,
                 "Forbidden",
-                "This account has been disabled",
+                "Tài khoản này đã bị vô hiệu hóa",
                 request.path
             )
 
-        # Generate JWT token
+        # Tạo JWT token
         try:
             refresh = RefreshToken.for_user(user)
+            token = str(refresh.access_token)
+
+            # Thêm thông tin user vào response
+            user_data = {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "name": user.name,
+                "role": user.role,
+                "avatar": str(user.avatar) if user.avatar else None,
+                "is_staff": user.is_staff,
+                "is_superuser": user.is_superuser
+            }
+
             return custom_response(
                 status.HTTP_200_OK,
-                "Login successful",
+                "Đăng nhập thành công",
                 {
-                    "access_token": str(refresh.access_token),
-                    "refresh_token": str(refresh),
+                    "token": token,
+                    "user": user_data
                 }
             )
         except Exception as e:
-            print(f"Token generation error: {str(e)}")
+            print(f"Lỗi tạo token: {str(e)}")
             return error_response(
                 status.HTTP_500_INTERNAL_SERVER_ERROR,
                 "Internal Server Error",
-                "Could not generate token",
+                "Không thể tạo token",
                 request.path
             )
 
 
 class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # Không cần xác thực vì không cần blacklist token
 
     def post(self, request):
-        try:
-            refresh_token = request.data.get("refresh_token")
-            auth_header = request.headers.get('Authorization')
-            print(auth_header)  # Debug: Check if "Bearer" exists
-            token = RefreshToken(refresh_token)
-            token.blacklist()  # Mark token as expired
-
-            return custom_response(status.HTTP_200_OK, "Logout successful")
-        except Exception:
-            return error_response(status.HTTP_400_BAD_REQUEST, "Bad Request", "Invalid token", request.path)
-
-
-class RefreshTokenView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        try:
-            refresh_token = request.data.get("refresh_token")
-            if not refresh_token:
-                return error_response(status.HTTP_400_BAD_REQUEST, "Bad Request", "Refresh token is missing", request.path)
-
-            token = RefreshToken(refresh_token)
-            new_access_token = str(token.access_token)
-
-            return custom_response(
-                status.HTTP_200_OK,
-                "Token refreshed successfully",
-                {"access_token": new_access_token}
-            )
-        except Exception:
-            return error_response(status.HTTP_401_UNAUTHORIZED, "Unauthorized", "Invalid refresh token", request.path)
+        # Không cần xử lý gì với token vì phía client sẽ xóa token
+        return custom_response(status.HTTP_200_OK, "Đăng xuất thành công")
 
 
 
@@ -355,5 +344,87 @@ class RegisterView(APIView):
                 "Bad Request",
                 serializer.errors,
                 request.path
+            )
+
+
+class NewsImportView(APIView):
+    """
+    API endpoint that allows importing multiple news articles at once.
+    """
+    permission_classes = [AllowAny]  # No authentication required
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Import multiple news articles from a JSON array.
+        Each news item should follow the structure of the News model.
+        """
+        news_data = request.data
+        
+        if not isinstance(news_data, list):
+            return error_response(
+                status.HTTP_400_BAD_REQUEST,
+                "Bad Request",
+                "Request data must be a JSON array of news articles",
+                request.path
+            )
+            
+        if not news_data:
+            return error_response(
+                status.HTTP_400_BAD_REQUEST,
+                "Bad Request",
+                "Empty news data provided",
+                request.path
+            )
+        
+        results = []
+        errors = []
+        
+        for index, item in enumerate(news_data):
+            serializer = NewsSerializer(data=item)
+            
+            if serializer.is_valid():
+                try:
+                    news = serializer.save()
+                    results.append({
+                        "id": news.id,
+                        "title": news.title,
+                        "status": "success"
+                    })
+                except Exception as e:
+                    errors.append({
+                        "index": index,
+                        "title": item.get("title", "Unknown title"),
+                        "error": str(e)
+                    })
+            else:
+                errors.append({
+                    "index": index,
+                    "title": item.get("title", "Unknown title"),
+                    "error": serializer.errors
+                })
+        
+        if errors:
+            # If there are errors, return them along with successful imports
+            return custom_response(
+                status.HTTP_207_MULTI_STATUS,
+                f"Imported {len(results)} out of {len(news_data)} articles with {len(errors)} errors",
+                {
+                    "imported": results,
+                    "errors": errors,
+                    "total_success": len(results),
+                    "total_failure": len(errors),
+                    "total_submitted": len(news_data)
+                }
+            )
+        else:
+            # All imports were successful
+            return custom_response(
+                status.HTTP_201_CREATED,
+                f"Successfully imported {len(results)} articles",
+                {
+                    "imported": results,
+                    "total_imported": len(results)
+                }
             )
 
