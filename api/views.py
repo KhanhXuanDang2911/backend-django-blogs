@@ -25,6 +25,11 @@ from datetime import timedelta
 from collections import OrderedDict
 from rest_framework.pagination import LimitOffsetPagination
 from django.db import transaction
+from rest_framework.decorators import api_view
+import json
+import os
+from .vn_news_crawler import VnExpressCrawler, VietnamNetCrawler
+from datetime import datetime
 
 class BaseViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
@@ -427,4 +432,85 @@ class NewsImportView(APIView):
                     "total_imported": len(results)
                 }
             )
+
+# Initialize crawlers
+vnexpress_crawler = VnExpressCrawler()
+vietnamnet_crawler = VietnamNetCrawler()
+
+@api_view(['GET'])
+def crawl_news(request):
+    # Get query parameters
+    source = request.GET.get('source', 'vnexpress')  # Default to vnexpress
+    category_id = request.GET.get('category_id')
+    num_pages = request.GET.get('num_pages', 1)
+    num_articles = request.GET.get('num_articles', 10)
+    
+    # Convert to appropriate types
+    try:
+        category_id = int(category_id) if category_id else None
+        num_pages = int(num_pages)
+        num_articles = int(num_articles)
+    except (TypeError, ValueError):
+        return Response({'error': 'Invalid parameters'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Validate source
+    if source not in ['vnexpress', 'vietnamnet']:
+        return Response({'error': 'Invalid source. Must be either vnexpress or vietnamnet'}, 
+                       status=status.HTTP_400_BAD_REQUEST)
+        
+    # Select crawler based on source
+    crawler = vnexpress_crawler if source == 'vnexpress' else vietnamnet_crawler
+    
+    # Find category name from ID
+    category_name = None
+    for cat_name, cat_id in crawler.categories.items():
+        if cat_id == category_id:
+            category_name = cat_name
+            break
+            
+    if not category_name:
+        return Response({'error': f'Invalid category ID for {source}'}, 
+                       status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        # Crawl articles
+        articles = crawler.crawl_category(category_name, num_pages)
+        
+        # Get detailed articles
+        detailed_articles = crawler.crawl_article_details(articles, num_articles)
+        
+        # Generate filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{source}_{category_name}_{timestamp}.json"
+        
+        # Create news_data directory if it doesn't exist
+        os.makedirs('news_data', exist_ok=True)
+        
+        # Save to file in news_data directory
+        filepath = os.path.join('news_data', filename)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(detailed_articles, f, ensure_ascii=False, indent=4)
+            
+        # Return just the array of articles
+        return Response(detailed_articles)
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def get_categories(request):
+    source = request.GET.get('source', 'vnexpress')
+    
+    if source not in ['vnexpress', 'vietnamnet']:
+        return Response({'error': 'Invalid source. Must be either vnexpress or vietnamnet'}, 
+                       status=status.HTTP_400_BAD_REQUEST)
+        
+    crawler = vnexpress_crawler if source == 'vnexpress' else vietnamnet_crawler
+    
+    categories = {
+        'categories': crawler.categories,
+        'category_names': crawler.category_names
+    }
+    
+    return Response(categories)
 
